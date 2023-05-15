@@ -2694,6 +2694,7 @@ int test11Finished = 0;
 int test11cConnected = 0;
 int test11OnFailureCalled = 0;
 int test11MessagesToSend = 6;
+int test11messagedeleted = 0;
 
 void test11cOnConnect(void* context, MQTTAsync_successData* response)
 {
@@ -2718,6 +2719,13 @@ void test11cOnConnect(void* context, MQTTAsync_successData* response)
         rc = MQTTAsync_sendMessage(c, test_topic, &pubmsg, &opts);
         assert("Good rc from sendMessage", rc == MQTTASYNC_SUCCESS, "rc was %d ", rc);
     }
+}
+
+void test11_messageDeleted(void* context, MQTTAsync_token token)
+{
+    MQTTAsync c = (MQTTAsync)context;
+    MyLog(LOGA_INFO, "Message %d token deleted", token);
+    test11messagedeleted++;
 }
 
 void test11OnFailure(void* context, MQTTAsync_failureData* response)
@@ -2762,6 +2770,9 @@ int test11(struct Options options)
         goto exit;
     }
 
+    rc = MQTTAsync_setMessageDeletedCallback (c, c, test11_messageDeleted);
+    assert("Good rc from setMessageDeletedCallback", rc == MQTTASYNC_SUCCESS, "rc was %d", rc);
+
     opts.onSuccess = test11cOnConnect;
     opts.onFailure = test11OnFailure;
     opts.context = c;
@@ -2775,6 +2786,15 @@ int test11(struct Options options)
         failures++;
         goto exit;
     }
+
+    /* wait for the first 3 messages to be deleted  */
+    count = 0;
+    while (test11messagedeleted < 3 && ++count < 1000)
+        MySleep(100);
+
+    assert("Test number of messages deleted:",test11messagedeleted == 3, "test11messagedeleted was %d", test11messagedeleted);
+    rc = MQTTAsync_disconnect(c, NULL);
+    assert("Good rc from disconnect", rc == MQTTASYNC_SUCCESS, "rc was %d ", rc);
 
 exit:
     MySleep(200);
